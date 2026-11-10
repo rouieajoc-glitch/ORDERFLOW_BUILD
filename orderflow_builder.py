@@ -36,11 +36,3 @@ def download_month(symbol: str, month: str, cache_dir: str) -> str:
     name = f"{symbol}-aggTrades-{month}.zip"
     path = os.path.join(cache_dir, name)
     if os.path.exists(path) and os.path.getsize(path) > 0:
-        print(f"  already have {name}")
-        return path
-    url = f"{BASE}/{symbol}/{name}"
-    print(f"  downloading {url}")
-    with requests.get(url, stream=True, timeout=60) as r:
-        if r.status_code == 404:
-            sys.exit(
-                f"Not found: {url}\n"
