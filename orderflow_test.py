@@ -65,7 +65,7 @@ def find_obs(df, disp, lookback=5):
     return obs
 
 
-def simulate(df, obs, near, stopbuf, maxage, maxhold, targets, cost_pct):
+def simulate(df, obs, near, stopbuf, maxage, maxhold, targets, cost_pct, minrisk=0.0):
     o, c, h, l, atr = (df[k].to_numpy() for k in ("open", "close", "high", "low", "atr"))
     buy, sell = df["buy_vol"].to_numpy(), df["sell_vol"].to_numpy()
     times = df["candle"].to_numpy()
@@ -99,6 +99,8 @@ def simulate(df, obs, near, stopbuf, maxage, maxhold, targets, cost_pct):
             risk = stop - entry
         if risk < 0.3 * atr[t]:
             continue
+        if risk / entry * 100 < minrisk:
+            continue  # stop too small: fees would eat too much of each R
         tot = buy[t] + sell[t]
         ratio = (buy[t] - sell[t]) / tot if tot > 0 else 0.0
         cost_r = cost_pct * entry / risk
@@ -151,6 +153,8 @@ def main():
     ap.add_argument("--maxhold", type=int, default=192, help="max bars in trade")
     ap.add_argument("--fee", type=float, default=0.0005, help="fee per side (0.0005 = 0.05%%)")
     ap.add_argument("--slip", type=float, default=0.0005, help="slippage per side")
+    ap.add_argument("--minrisk", type=float, default=0.0,
+                    help="skip trades whose stop is smaller than this %% of price (e.g. 0.7)")
     ap.add_argument("--minratio", type=float, default=0.0, help="delta ratio threshold")
     args = ap.parse_args()
 
@@ -162,9 +166,10 @@ def main():
     obs = find_obs(df, args.disp)
     targets = (2, 3)
     cost_pct = 2 * (args.fee + args.slip)
-    tr = simulate(df, obs, args.near, args.stopbuf, args.maxage, args.maxhold, targets, cost_pct)
+    tr = simulate(df, obs, args.near, args.stopbuf, args.maxage, args.maxhold, targets,
+                  cost_pct, args.minrisk)
     print(f"{len(df)} candles, {len(obs)} OBs found, {len(tr)} retest trades, "
-          f"round-trip cost {100*cost_pct:.2f}%")
+          f"round-trip cost {100*cost_pct:.2f}%, min stop {args.minrisk}% of price")
     if len(tr) == 0:
         return
     tr.to_csv(os.path.join(args.dir, f"{args.symbol}_ob_trades.csv"), index=False)
